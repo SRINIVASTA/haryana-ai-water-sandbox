@@ -6,3 +6,4 @@ streamlit-folium
 scipy
 numpy
 pandas
+rioxarray
