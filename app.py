@@ -16,23 +16,34 @@ st.info("Innovator: Srinivasta | Tech: Python, xarray, Folium | Data: NASA JPL M
 # --- DATA LOADING ---
 @st.cache_data
 def load_data():
-    # Ensure this file is uploaded to your GitHub repo
+    # Loading the pilot file you generated
     ds = xr.open_dataset('haryana_groundwater_pilot.nc')
-    # Auto-identify the data variable
-    var_name = [v for v in ds.data_vars if 'lwe' in v.lower() or 'thickness' in v.lower()][0]
-    return ds, var_name
+    
+    # Using the specific variable name found in your dataset
+    target_var = '__xarray_dataarray_variable__'
+    
+    # Fallback logic in case of name changes
+    if target_var not in ds.data_vars:
+        target_var = list(ds.data_vars)[0]
+        
+    return ds, target_var
 
 try:
-    ds, var_name = load_data()
-    hry_data = ds[var_name]
+    ds, target_var = load_data()
+    hry_data = ds[target_var]
 
-    # --- SIDEBAR METRICS ---
-    st.sidebar.header("📈 State-Wide Analysis")
+    # --- SIDEBAR ANALYSIS ---
+    st.sidebar.header("📈 State-Wide Metrics")
     
-    # Calculate Burn Rate
+    # Calculate state-wide average time series
     state_avg = hry_data.mean(dim=['lat', 'lon'])
+    
+    # Perform Linear Regression for Burn Rate
     x = np.arange(len(state_avg))
-    slope, _, _, _, _ = linregress(x, state_avg.values)
+    y = state_avg.values
+    # Handle potential NaNs for regression
+    mask = ~np.isnan(y)
+    slope, _, _, _, _ = linregress(x[mask], y[mask])
     
     st.sidebar.metric("Monthly Burn Rate", f"{slope:.4f} cm/mo", delta=f"{slope:.4f}", delta_color="inverse")
     st.sidebar.metric("Annual Depletion", f"{slope*12:.2f} cm/yr")
@@ -42,52 +53,67 @@ try:
     else:
         st.sidebar.warning("STATUS: WATCH")
 
-    # --- MAIN DASHBOARD ---
+    # --- MAIN DASHBOARD LAYOUT ---
     col1, col2 = st.columns([2, 1])
 
     with col1:
         st.subheader("Interactive Risk Map")
-        # Initialize Folium Map
+        # Initialize Map centered on Haryana
         m = folium.Map(location=[29.05, 76.08], zoom_start=8, tiles='CartoDB Positron')
         
+        # Calculate mean anomaly over the entire time period for the map
         data_avg = hry_data.mean(dim='time')
+        
         for lat in data_avg.lat.values:
             for lon in data_avg.lon.values:
                 val = float(data_avg.sel(lat=lat, lon=lon).values)
                 if not np.isnan(val):
-                    # Color Logic
-                    color = '#d73027' if val < -35 else '#fc8d59' if val < -15 else '#4575b4'
+                    # Color Logic: Red for High Loss, Orange for Warning
+                    if val < -35:
+                        color = '#d73027' 
+                        status = "CRITICAL"
+                    elif val < -15:
+                        color = '#fc8d59'
+                        status = "WARNING"
+                    else:
+                        color = '#4575b4'
+                        status = "STABLE"
+                    
                     folium.Rectangle(
                         bounds=[[lat-0.25, lon-0.25], [lat+0.25, lon+0.25]],
                         color=color, fill=True, fill_opacity=0.5,
-                        popup=f"Risk: {val:.2f}cm anomaly",
-                        tooltip=f"Anomaly: {val:.2f}cm"
+                        popup=f"Zone: {status}<br>Anomaly: {val:.2f}cm",
+                        tooltip=f"{status}: {val:.2f}cm"
                     ).add_to(m)
         
         st_folium(m, width=800, height=500)
 
     with col2:
-        st.subheader("East-West Risk Gap")
-        # Divide at 76.2 Longitude
-        west = hry_data.sel(lon=slice(74.4, 76.2)).mean(dim=['lat', 'lon'])
-        east = hry_data.sel(lon=slice(76.2, 77.8)).mean(dim=['lat', 'lon'])
+        st.subheader("Regional Risk Gap")
+        # Divide state at 76.2 Longitude (Approx East/West divide)
+        west_zone = hry_data.sel(lon=slice(74.4, 76.2)).mean(dim=['lat', 'lon'])
+        east_zone = hry_data.sel(lon=slice(76.2, 77.8)).mean(dim=['lat', 'lon'])
         
-        # Calculate Zone Slopes
-        s_w, _, _, _, _ = linregress(np.arange(len(west)), west.fillna(0).values)
-        s_e, _, _, _, _ = linregress(np.arange(len(east)), east.fillna(0).values)
+        # Calculate Zone Specific Burn Rates
+        x_w = np.arange(len(west_zone))
+        x_e = np.arange(len(east_zone))
+        s_w, _, _, _, _ = linregress(x_w, west_zone.fillna(0).values)
+        s_e, _, _, _, _ = linregress(x_e, east_zone.fillna(0).values)
         
         st.write(f"**West Zone Burn:** {s_w:.4f} cm/mo")
         st.write(f"**East Zone Burn:** {s_e:.4f} cm/mo")
         
+        # Risk Gap Calculation
         gap = abs((s_e - s_w) / s_w) * 100
-        st.metric("Risk Gap", f"{gap:.1f}%", help="How much faster the East is depleting compared to the West")
+        st.metric("Risk Gap (East vs West)", f"{gap:.1f}%")
         
         st.markdown("---")
-        st.write("**Future Scope:**")
-        st.caption("1. Machine Learning Downscaling to 5km")
-        st.caption("2. Real-time Observation Well Integration")
-        st.caption("3. District-wise 'Day Zero' Predictions")
+        st.write("**Technical Roadmap:**")
+        st.caption("1. Machine Learning Downscaling to 5km resolution")
+        st.caption("2. Integration with Haryana Water Authority Well Data")
+        st.caption("3. Predictive 'Day Zero' forecasting for 22 districts")
 
 except Exception as e:
-    st.error(f"Please upload 'haryana_groundwater_pilot.nc' to your GitHub repo. Error: {e}")
+    st.error("Data Load Error")
+    st.write(f"Ensure 'haryana_groundwater_pilot.nc' is in your GitHub repo. Technical details: {e}")
 
