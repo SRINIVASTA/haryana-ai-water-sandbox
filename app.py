@@ -28,23 +28,31 @@ dist_coords = {
 # --- DATA LOADING ENGINE ---
 @st.cache_data
 def load_data():
-    ds = xr.open_dataset('haryana_groundwater_pilot.nc')
-    # Target the specific variable name from your NASA processing
-    target_var = '__xarray_dataarray_variable__'
-    if target_var not in ds.data_vars:
-        target_var = list(ds.data_vars)
-    return ds, target_var
+    try:
+        ds = xr.open_dataset('haryana_groundwater_pilot.nc')
+        # Filter to find the data variable, excluding coords and scale factors
+        valid_vars = [v for v in ds.data_vars if v not in ['lat', 'lon', 'time', 'scale_factor']]
+        if not valid_vars:
+            valid_vars = [list(ds.data_vars)[0]]
+        return ds, valid_vars[0]
+    except Exception as e:
+        return None, str(e)
 
-try:
-    ds, target_var = load_data()
+ds, target_var = load_data()
+
+if ds is None:
+    st.error(f"⚠️ Deployment Error: {target_var}")
+    st.write("Ensure 'haryana_groundwater_pilot.nc' is in your GitHub root folder.")
+else:
     hry_data = ds[target_var]
 
-    # --- SIDEBAR: STATE-WIDE METRICS ---
+    # --- SIDEBAR: STATE-WIDE ANALYSIS ---
     st.sidebar.header("📊 State-Wide Analysis")
-    state_avg = hry_data.mean(dim=['lat', 'lon'])
-    x = np.arange(len(state_avg))
-    mask = ~np.isnan(state_avg.values)
-    slope, _, _, _, _ = linregress(x[mask], state_avg.values[mask])
+    state_avg = hry_data.mean(dim=['lat', 'lon']).values.flatten()
+    x_axis = np.arange(len(state_avg))
+    mask = ~np.isnan(state_avg)
+    
+    slope, _, _, _, _ = linregress(x_axis[mask], state_avg[mask])
     
     st.sidebar.metric("Monthly Burn Rate", f"{slope:.4f} cm/mo", delta=f"{slope:.4f}", delta_color="inverse")
     st.sidebar.metric("Annual Depletion", f"{slope*12:.2f} cm/yr")
@@ -56,6 +64,7 @@ try:
 
     # --- MAIN DASHBOARD: MAP & ANALYSIS ---
     col1, col2 = st.columns(2)
+
     with col1:
         st.subheader("Interactive 22-District Risk Map")
         m = folium.Map(location=[29.05, 76.08], zoom_start=8, tiles='CartoDB Positron')
@@ -64,7 +73,8 @@ try:
         # Layer 1: NASA Data Grid
         for lat in data_avg.lat.values:
             for lon in data_avg.lon.values:
-                val = float(data_avg.sel(lat=lat, lon=lon).values)
+                # Using .item() to avoid scalar errors
+                val = data_avg.sel(lat=lat, lon=lon).values.item()
                 if not np.isnan(val):
                     color = '#d73027' if val < -30 else '#fc8d59' if val < -15 else '#4575b4'
                     folium.Rectangle(
@@ -74,7 +84,8 @@ try:
 
         # Layer 2: District Clickable Markers
         for name, coords in dist_coords.items():
-            dist_val = float(data_avg.sel(lat=coords, lon=coords, method='nearest').values)
+            # Get nearest NASA data point for the district
+            dist_val = data_avg.sel(lat=coords[0], lon=coords[1], method='nearest').values.item()
             status = "⚠️ WARNING" if dist_val < -20 else "✅ STABLE"
             folium.Marker(
                 location=coords,
@@ -83,17 +94,17 @@ try:
                 tooltip=name
             ).add_to(m)
         
-        st_folium(m, width=800, height=550)
+        st_folium(m, width=700, height=550)
 
     with col2:
         st.subheader("Regional Risk Comparison")
         # Divide state at 76.2 Longitude (East-West Gap)
-        west = hry_data.sel(lon=slice(74.4, 76.2)).mean(dim=['lat', 'lon'])
-        east = hry_data.sel(lon=slice(76.2, 77.8)).mean(dim=['lat', 'lon'])
+        west = hry_data.sel(lon=slice(74.4, 76.2)).mean(dim=['lat', 'lon']).values.flatten()
+        east = hry_data.sel(lon=slice(76.2, 77.8)).mean(dim=['lat', 'lon']).values.flatten()
         
-        # Calculate Zone Burn Rates
-        s_w, _, _, _, _ = linregress(np.arange(len(west)), west.fillna(0).values)
-        s_e, _, _, _, _ = linregress(np.arange(len(east)), east.fillna(0).values)
+        # Calculate Zone Burn Rates (handling NaNs)
+        s_w, _, _, _, _ = linregress(np.arange(len(west)), np.nan_to_num(west))
+        s_e, _, _, _, _ = linregress(np.arange(len(east)), np.nan_to_num(east))
         
         st.write(f"🏠 **West Zone Burn:** {s_w:.4f} cm/mo")
         st.write(f"🏢 **East Zone Burn:** {s_e:.4f} cm/mo")
@@ -103,10 +114,7 @@ try:
         
         st.markdown("---")
         st.markdown("### 🛠 AI Sandbox Roadmap")
-        st.write("1. **Spatial Downscaling:** Increase resolution to 5km using ML.")
-        st.write("2. **Local Integration:** Merge with HWRA piezometric well data.")
-        st.write("3. **Day Zero Prediction:** District-wise water exhaustion dates.")
+        st.write("1. **Spatial Downscaling:** Increase resolution to 5km using Random Forest.")
+        st.write("2. **Local Integration:** Merge with Haryana Govt (HWRA) piezometric well data.")
+        st.write("3. **Day Zero Prediction:** AI-driven water exhaustion dates for 22 districts.")
 
-except Exception as e:
-    st.error("Deployment Error")
-    st.write(f"Check if 'haryana_groundwater_pilot.nc' is on GitHub. Detail: {e}")
