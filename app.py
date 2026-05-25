@@ -29,11 +29,12 @@ dist_coords = {
 def load_data():
     try:
         ds = xr.open_dataset('haryana_groundwater_pilot.nc')
-        # Identify the data variable (handling the generic name from Colab)
         valid_vars = [v for v in ds.data_vars if v not in ['lat', 'lon', 'time', 'scale_factor']]
         if not valid_vars:
             valid_vars = [list(ds.data_vars)[0]]
-        return ds, valid_vars[0]
+        else:
+            valid_vars = valid_vars[0]
+        return ds, valid_vars
     except Exception as e:
         return None, str(e)
 
@@ -51,10 +52,9 @@ else:
     mask = ~np.isnan(state_avg)
     slope, _, _, _, _ = linregress(x_axis[mask], state_avg[mask])
     
-    st.sidebar.metric("Monthly Burn Rate", f"{slope:.4f} cm/mo", delta=f"{slope:.4f}", delta_color="inverse")
+    st.sidebar.metric("Monthly Burn Rate", f"{slope:.4f} cm/mo")
     st.sidebar.metric("Annual Depletion", f"{slope*12:.2f} cm/yr")
 
-    # REGIONAL RISK GAP
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚖️ Regional Risk Gap")
     west = hry_data.sel(lon=slice(74.4, 76.2)).mean(dim=['lat', 'lon']).values.flatten()
@@ -69,19 +69,18 @@ else:
     gap = abs((s_e - s_w) / s_w) * 100
     st.sidebar.metric("Risk Gap (East vs West)", f"{gap:.1f}%")
 
-    # AI SANDBOX ROADMAP
     st.sidebar.markdown("---")
     st.sidebar.subheader("🛠 AI Sandbox Roadmap")
-    st.sidebar.write("1. **Spatial Downscaling:** Increase resolution to 5km via Random Forest.")
-    st.sidebar.write("2. **Ground Truth:** Merge with Haryana Govt (HWRA) well data.")
-    st.sidebar.write("3. **Prediction:** Forecast water exhaustion dates for 22 districts.")
+    st.sidebar.write("1. **Spatial Downscaling:** to 5km via Random Forest.")
+    st.sidebar.write("2. **Ground Truth:** Merge with Haryana Govt (HWRA) data.")
+    st.sidebar.write("3. **Prediction:** Forecast exhaustion dates.")
 
-    # --- MAIN DASHBOARD: FULL WIDTH MAP ---
+    # --- MAIN DASHBOARD ---
     st.subheader("Interactive 22-District Risk Map")
     m = folium.Map(location=[29.05, 76.08], zoom_start=8, tiles='CartoDB Positron')
     data_avg = hry_data.mean(dim='time')
 
-    # Layer 1: Data Grid Background
+    # Grid Layer
     for lat in data_avg.lat.values:
         for lon in data_avg.lon.values:
             val = data_avg.sel(lat=lat, lon=lon).values.item()
@@ -92,16 +91,13 @@ else:
                     color=color, fill=True, fill_opacity=0.3, weight=0
                 ).add_to(m)
 
-    # Layer 2: District Markers with Hover & Popup
+    # District Layer - FIXED SEL LOGIC
     for name, coords in dist_coords.items():
-        dist_val = data_avg.sel(lat=coords, lon=coords, method='nearest').values.item()
+        # Pass lat and lon separately to fix the ValueError
+        dist_val = data_avg.sel(lat=coords[0], lon=coords[1], method='nearest').values.item()
         
-        if dist_val < -30:
-            status, icon_color = "CRITICAL 🚨", 'darkred'
-        elif dist_val < -15:
-            status, icon_color = "WARNING ⚠️", 'orange'
-        else:
-            status, icon_color = "STABLE ✅", 'blue'
+        status = "CRITICAL 🚨" if dist_val < -30 else "WARNING ⚠️" if dist_val < -15 else "STABLE ✅"
+        icon_color = 'darkred' if dist_val < -30 else 'orange' if dist_val < -15 else 'blue'
 
         folium.Marker(
             location=coords,
