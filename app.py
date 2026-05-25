@@ -10,8 +10,8 @@ from scipy.stats import linregress
 st.set_page_config(page_title="Haryana AI Water Sandbox", layout="wide")
 
 st.title("🌊 Haryana Groundwater Risk AI Sandbox")
-st.markdown("### AI-Driven Aquifer Monitoring using NASA Satellite Gravimetry")
-st.info("Innovator: Srinivasta | Tech: Python, xarray, Folium | Source: NASA JPL Mascon RL06.3")
+st.markdown("### AI-Driven Aquifer Monitoring using Satellite Gravimetry")
+st.info("Innovator: Srinivasta | Tech: Python, xarray, Folium | Data: NASA JPL Mascon CRI-Filtered")
 
 # --- 22 DISTRICT COORDINATES ---
 dist_coords = {
@@ -30,7 +30,7 @@ dist_coords = {
 def load_data():
     try:
         ds = xr.open_dataset('haryana_groundwater_pilot.nc')
-        # Filter to find the data variable, excluding coords and scale factors
+        # Target the data variable (handling specific naming from Colab)
         valid_vars = [v for v in ds.data_vars if v not in ['lat', 'lon', 'time', 'scale_factor']]
         if not valid_vars:
             valid_vars = [list(ds.data_vars)[0]]
@@ -42,7 +42,7 @@ ds, target_var = load_data()
 
 if ds is None:
     st.error(f"⚠️ Deployment Error: {target_var}")
-    st.write("Ensure 'haryana_groundwater_pilot.nc' is in your GitHub root folder.")
+    st.write("Ensure 'haryana_groundwater_pilot.nc' is on GitHub.")
 else:
     hry_data = ds[target_var]
 
@@ -62,7 +62,7 @@ else:
     else:
         st.sidebar.warning("STATUS: WATCH")
 
-    # --- MAIN DASHBOARD: MAP & ANALYSIS ---
+    # --- MAIN DASHBOARD ---
     col1, col2 = st.columns(2)
 
     with col1:
@@ -70,10 +70,9 @@ else:
         m = folium.Map(location=[29.05, 76.08], zoom_start=8, tiles='CartoDB Positron')
         data_avg = hry_data.mean(dim='time')
 
-        # Layer 1: NASA Data Grid
+        # Layer 1: Data Grid Background
         for lat in data_avg.lat.values:
             for lon in data_avg.lon.values:
-                # Using .item() to avoid scalar errors
                 val = data_avg.sel(lat=lat, lon=lon).values.item()
                 if not np.isnan(val):
                     color = '#d73027' if val < -30 else '#fc8d59' if val < -15 else '#4575b4'
@@ -82,27 +81,36 @@ else:
                         color=color, fill=True, fill_opacity=0.3, weight=0
                     ).add_to(m)
 
-        # Layer 2: District Clickable Markers
+        # Layer 2: District Markers with Hover Tooltips
         for name, coords in dist_coords.items():
-            # Get nearest NASA data point for the district
-            dist_val = data_avg.sel(lat=coords[0], lon=coords[1], method='nearest').values.item()
-            status = "⚠️ WARNING" if dist_val < -20 else "✅ STABLE"
+            dist_val = data_avg.sel(lat=coords, lon=coords, method='nearest').values.item()
+            
+            # Warning Status Logic
+            if dist_val < -30:
+                status, icon_color = "CRITICAL 🚨", 'darkred'
+            elif dist_val < -15:
+                status, icon_color = "WARNING ⚠️", 'orange'
+            else:
+                status, icon_color = "STABLE ✅", 'blue'
+
+            # Tooltip shows both Name and Warning on point (hover)
+            hover_text = f"{name} | {status} ({dist_val:.2f} cm)"
+
             folium.Marker(
                 location=coords,
-                icon=folium.Icon(color='red' if dist_val < -20 else 'blue', icon='info-sign'),
-                popup=f"<b>{name}</b><br>Anomaly: {dist_val:.2f} cm<br>Status: {status}",
-                tooltip=name
+                icon=folium.Icon(color=icon_color, icon='info-sign'),
+                popup=f"<b>{name}</b><br>Status: {status}<br>Anomaly: {dist_val:.2f} cm",
+                tooltip=hover_text
             ).add_to(m)
         
         st_folium(m, width=700, height=550)
 
     with col2:
-        st.subheader("Regional Risk Comparison")
-        # Divide state at 76.2 Longitude (East-West Gap)
+        st.subheader("Regional Risk Gap")
         west = hry_data.sel(lon=slice(74.4, 76.2)).mean(dim=['lat', 'lon']).values.flatten()
         east = hry_data.sel(lon=slice(76.2, 77.8)).mean(dim=['lat', 'lon']).values.flatten()
         
-        # Calculate Zone Burn Rates (handling NaNs)
+        # Zone Slopes
         s_w, _, _, _, _ = linregress(np.arange(len(west)), np.nan_to_num(west))
         s_e, _, _, _, _ = linregress(np.arange(len(east)), np.nan_to_num(east))
         
@@ -114,7 +122,7 @@ else:
         
         st.markdown("---")
         st.markdown("### 🛠 AI Sandbox Roadmap")
-        st.write("1. **Spatial Downscaling:** Increase resolution to 5km using Random Forest.")
-        st.write("2. **Local Integration:** Merge with Haryana Govt (HWRA) piezometric well data.")
-        st.write("3. **Day Zero Prediction:** AI-driven water exhaustion dates for 22 districts.")
+        st.write("1. **Spatial Downscaling:** Increase resolution to 5km via Random Forest.")
+        st.write("2. **Ground Truth:** Merge with Haryana Govt (HWRA) well data.")
+        st.write("3. **Prediction:** Forecast water exhaustion dates for 22 districts.")
 
