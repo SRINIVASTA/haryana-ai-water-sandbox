@@ -1,9 +1,10 @@
 # 🌊 Haryana Groundwater Risk AI Sandbox
 ### AI-Driven Aquifer Monitoring using NASA Satellite Gravimetry
 
-![Status](https://shields.io)
-![Sector](https://shields.io)
-![Tech](https://shields.io|%20AI%20|%20Geodata-green)
+🛠 **Status:** Prototype (v1.0)
+💧 **Sector:** Water Supply
+💻 **Tech Stack:** Python | AI | ML | Geodata
+📍 **Region:** Haryana, India (East-West Analysis)
 
 ## 📌 Project Overview
 This project is a technical prototype developed for the **Haryana AI Sandbox (HAIDP)** initiative. It transforms raw NASA satellite data into an actionable "Risk Rating" system for Haryana’s groundwater resources. 
