@@ -32,7 +32,7 @@ Our analysis reveals a significant disparity between regional depletion rates:
 - 20+ Years in Market Risk & Analytics
 - 4 Years Hands-on AI/ML Development
 - Certified in Geodata Analysis (IIRS/ISRO)
-- [LinkedIn Profile](https://linkedin.com) | [Portfolio App](https://streamlit.app)
+- [LinkedIn Profile](https://www.linkedin.com/in/srinivas-t-a-557637119/) | [Portfolio App](https://haryana-ai-water-sandbox-yxpxdqyccsbeiyybzqf5og.streamlit.app/)
 
 ---
 *Developed for the Haryana AI Sandbox Launch - June 1, 2026*
