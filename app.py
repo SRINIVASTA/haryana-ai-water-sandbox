@@ -55,8 +55,7 @@ try:
         st.sidebar.warning("STATUS: WATCH")
 
     # --- MAIN DASHBOARD: MAP & ANALYSIS ---
-    col1, col2 = st.columns()
-
+    col1, col2 = st.columns(2)
     with col1:
         st.subheader("Interactive 22-District Risk Map")
         m = folium.Map(location=[29.05, 76.08], zoom_start=8, tiles='CartoDB Positron')
