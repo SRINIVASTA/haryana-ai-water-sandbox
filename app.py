@@ -81,9 +81,10 @@ else:
                         color=color, fill=True, fill_opacity=0.3, weight=0
                     ).add_to(m)
 
-        # Layer 2: District Markers with Hover Tooltips
+        # Layer 2: District Clickable Markers
         for name, coords in dist_coords.items():
-            dist_val = data_avg.sel(lat=coords, lon=coords, method='nearest').values.item()
+            # FIX: Pass lat and lon separately to .sel()
+            dist_val = data_avg.sel(lat=coords[0], lon=coords[1], method='nearest').values.item()
             
             # Warning Status Logic
             if dist_val < -30:
@@ -93,7 +94,7 @@ else:
             else:
                 status, icon_color = "STABLE ✅", 'blue'
 
-            # Tooltip shows both Name and Warning on point (hover)
+            # Tooltip shows both Name and Warning on hover
             hover_text = f"{name} | {status} ({dist_val:.2f} cm)"
 
             folium.Marker(
